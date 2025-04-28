@@ -4,21 +4,21 @@ El objetivo es comprender como funcionan las interrupciones. Para esto, controla
 ## Apartado A: Interrupcion por GPIO
 En este apartado, configuraremos un botón para que cada vez que lo presionemos genere una interrupcion, incrementando el contador. 
 Los materiales usados en este apartado son:
--Protoboard
--ESP32-S2
--Boton
+1.Protoboard
+2.ESP32-S2
+3.Boton
 Nuestro circuito montado quedo:
 ![image](https://github.com/user-attachments/assets/ba77938f-dc02-4db4-87c9-d504d80a7943) 
 ## Codigo usado:
 ```
 struct Button {
   const uint8_t PIN;
-  volatile uint32_t numberKeyPresses;
-  volatile bool pressed;
+  uint32_t numberKeyPresses;
+   bool pressed;
 };
 
 
-Button button1 = {16, 0, false};
+Button button1 = {18, 0, false};
 
 
 void IRAM_ATTR isr() {
@@ -78,5 +78,90 @@ Button 1 has been pressed X times
 Interrupt Detached!
 ```
 ---
-![image](https://github.com/user-attachments/assets/8044fc35-ebed-41ea-a701-56118b4fe148)  
+![Imagen de WhatsApp 2025-04-28 a las 12 20 00_8edc2969](https://github.com/user-attachments/assets/a08899fa-fba1-4ce6-947f-6404e801790b)
 
+
+
+## Apartado B: Interrupcion por Timer
+En este apartado, es lo mismo que el anterior pero en vez de GPIO, con un timer.
+Los materiales usados son los mismos que en anterior apartado también.
+El circuito montado también es el mismo
+## Código usado:
+```
+volatile int interruptCounter = 0;
+int totalInterruptCounter = 0;
+bool ledState = false;  // Estado de los LEDs
+
+
+const int LED1 = 16;
+const int LED2 = 5;
+
+
+hw_timer_t *timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+
+void IRAM_ATTR onTimer() {
+  portENTER_CRITICAL_ISR(&timerMux);
+  interruptCounter++;
+  portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial);  // Espera conexión serial
+
+
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+
+
+  // Configuración del temporizador
+  timer = timerBegin(0, 80, true);       // Timer 0, divisor 80 -> 1 tick = 1us
+  timerAttachInterrupt(timer, &onTimer, true);
+  timerAlarmWrite(timer, 1000000, true); // Interrupción cada 1s (1,000,000 us)
+  timerAlarmEnable(timer);
+
+
+  Serial.println("Timer iniciado...");
+}
+
+
+void loop() {
+  if (interruptCounter > 0) {
+    portENTER_CRITICAL(&timerMux);
+    interruptCounter--;
+    portEXIT_CRITICAL(&timerMux);
+
+
+    totalInterruptCounter++;
+
+
+    Serial.print("An interrupt has occurred. Total number: ");
+    Serial.println(totalInterruptCounter);
+
+
+    // Alternar estado de los LEDs
+    ledState = !ledState;
+    digitalWrite(LED1, ledState);
+    digitalWrite(LED2, ledState);
+  }
+}
+```
+
+###Funcionamiento del código:
+1. Se configura un temporizador con `timerBegin()`.
+2. Se adjunta una interrupción con `timerAttachInterrupt()`.
+3. Se establece una alarma con `timerAlarmWrite()`.
+4. Se habilita la alarma con `timerAlarmEnable()`.
+5. En cada interrupción, se incrementa un contador.
+6. En `loop()`, si hay una interrupción, se muestra el total de interrupciones en el puerto serie.
+
+### Salidas Obtenidas
+El puerto serie imprimirá:
+```
+An interrupt has occurred. Total number: X
+```
+---
+![image](https://github.com/user-attachments/assets/8044fc35-ebed-41ea-a701-56118b4fe148)  

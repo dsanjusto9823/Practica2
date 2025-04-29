@@ -165,3 +165,89 @@ An interrupt has occurred. Total number: X
 ```
 ---
 ![image](https://github.com/user-attachments/assets/8044fc35-ebed-41ea-a701-56118b4fe148)  
+
+
+## Ejercicio para subir nota
+En este ultimo apartado se nos pide que a partir de dos pulsadores que controlen un led alterar la frecuencia de parpadeo. Por lo tanto el led parpadeara a partir de la frecuencia inicial,
+tendra interrupciones a partir del timer y cuando pulses un boton esta disminuira y si pulsas el otro aumentara. El código incluye un filtrado de rebotes para evitar lecturas erroneas. Fotos del montaje:
+![image](https://github.com/user-attachments/assets/f77f834e-cfd7-4a2c-8f2d-60f8a80b97ec)
+![image](https://github.com/user-attachments/assets/44f0f516-8f1f-4ed2-a2d6-4da587bae786)
+
+
+## Código usado:
+```
+#include <Arduino.h>
+
+#define LED_PIN 4 // Pin del LED
+#define BTN_UP 18 // Botón para aumentar frecuencia
+#define BTN_DOWN 12 // Botón para disminuir frecuencia
+
+hw_timer_t *timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+volatile int timerInterval = 500000; // Intervalo inicial (500ms)
+volatile bool ledState = false;
+
+// Variables para el filtrado de rebotes
+volatile unsigned long lastPressUp = 0;
+volatile unsigned long lastPressDown = 0;
+const int debounceTime = 200; // Tiempo de filtrado de rebotes en ms
+
+// Interrupción del Timer
+void IRAM_ATTR onTimer() {
+portENTER_CRITICAL_ISR(&timerMux);
+ledState = !ledState;
+digitalWrite(LED_PIN, ledState);
+timerAlarmWrite(timer, timerInterval, true);
+portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+// ISR para el botón de aumentar frecuencia
+void IRAM_ATTR isrButtonUp() {
+unsigned long currentMillis = millis();
+if (currentMillis - lastPressUp > debounceTime) {
+portENTER_CRITICAL_ISR(&timerMux);
+if (timerInterval > 100000) timerInterval -= 100000; // Reduce 100ms
+portEXIT_CRITICAL_ISR(&timerMux);
+lastPressUp = currentMillis;
+}
+}
+
+// ISR para el botón de disminuir frecuencia
+void IRAM_ATTR isrButtonDown() {
+unsigned long currentMillis = millis();
+if (currentMillis - lastPressDown > debounceTime) {
+portENTER_CRITICAL_ISR(&timerMux);
+if (timerInterval < 1000000) timerInterval += 100000; // Aumenta 100ms
+portEXIT_CRITICAL_ISR(&timerMux);
+lastPressDown = currentMillis;
+}
+}
+
+void setup() {
+Serial.begin(115200);
+pinMode(LED_PIN, OUTPUT);
+pinMode(BTN_UP, INPUT_PULLUP);
+pinMode(BTN_DOWN, INPUT_PULLUP);
+
+// Configurar interrupciones para los botones
+attachInterrupt(BTN_UP, isrButtonUp, FALLING);
+attachInterrupt(BTN_DOWN, isrButtonDown, FALLING);
+
+// Configurar el temporizador
+timer = timerBegin(0, 80, true); // Temporizador 0, divisor de 80 (1us por tick)
+timerAttachInterrupt(timer, &onTimer, true);
+timerAlarmWrite(timer, timerInterval, true);
+timerAlarmEnable(timer);
+}
+
+void loop() {
+// No es necesario código en loop(), todo funciona con interrupciones
+}
+```
+
+### Funcionamiento del código
+El botón que aumenta la frecuencia es el 18 y el que disminuye esta es el 12. El led lo tenemos en el pin 4.El led parpadea a 1Hz (500ms) de frecuencia inicial y sale por pantalla el mensaje de que se ha iniciado el sistema. Entonces pulsamos el botón del GPIO18 disminuye de 50 en 50 el tiempo entre parpadeos causando que la frecuencia sea mayor con un mínimo de 100ms, y cuando se presione el GPIO12 habra la misma proporcion de disminucion que de aumento en el GPIO18 solo que en el caso de la bajada el parpadeo tendra el limite en 2000ms.
+
+
+
